@@ -5,10 +5,10 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "adm-zip": "^0.5.12",
     "dotenv": "^16.4.5",
     "mongoose": "^8.3.3",
     "node-fetch": "^2.7.0",

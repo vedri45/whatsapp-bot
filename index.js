@@ -5,9 +5,24 @@ const mongoose = require('mongoose');
 const fetch = require("node-fetch");
 require('dotenv').config();
 
+const Image = mongoose.model('Image', {
+    id: Number,
+    tag: String,
+});
+
+const Cosplay = mongoose.model('Cosplay', {
+    url: String,
+    tag: String,
+});
+
 mongoose.connect(process.env.MONGODB_URI).then(() => {
     const store = new MongoStore({ mongoose: mongoose });
     const client = new Client({
+        puppeteer: {
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            headless: true,
+            // executablePath: '/usr/bin/google-chrome-stable',
+        },
         authStrategy: new RemoteAuth({
             store: store,
             backupSyncIntervalMs: 300000
@@ -41,17 +56,13 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     let lastFetchTime = null;
 
     client.on('message', async (msg) => {
-        if (msg.body === '!random' || msg.body === '!waifu' || msg.body === '!neko' || msg.body === '!megumin') {
+        const handleWaifuRequest = async (body) => {
             if (!lastFetchTime || Date.now() - lastFetchTime >= waitTime) {
                 try {
-                    let str = msg.body;
-                    let body = str.replace('!', '');
-                    const waifuResponse = await fetch(`https://api.waifu.pics/sfw/${body}`);
-                    const waifuData = await waifuResponse.json();
-
-                    const imageUrl = waifuData.url;
+                    const imageUrl = await fetch(`https://api.waifu.pics/sfw/${body}`)
+                        .then(res => res.json())
+                        .then(data => data.url);
                     const media = await MessageMedia.fromUrl(imageUrl);
-
                     await client.sendMessage(msg.from, media);
                 } catch (error) {
                     console.error('Error fetching image:', error);
@@ -65,30 +76,114 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
 
                 client.sendMessage(msg.from, `Mohon tunggu ${remainingSeconds} detik`);
             }
-        } else if (msg.body === '!everyone') {
-            const chat = await msg.getChat();
+        };
 
-            let text = '';
-            let mentions = [];
+        const handleHSRImageRequest = async (body, collection, tag) => {
+            const capitalizeStr = body.charAt(0).toUpperCase() + body.slice(1);
+            const pipeline = [
+                { $match: { tag: `${capitalizeStr} (${tag})` } },
+                { $sample: { size: 1 } }
+            ];
+            const data = await collection.aggregate(pipeline);
+            if (data.length > 0) {
+                if (!lastFetchTime || Date.now() - lastFetchTime >= waitTime) {
+                    try {
+                        const imageUrl = await fetch(`https://www.zerochan.net/${data[0].id}?json`, {
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0',
+                                'Cookie': `z_theme=${process.env.Z_THEME}; guest_id=${process.env.GUEST_ID}; z_id=${process.env.Z_ID}; z_hash=${process.env.Z_HASH};`
+                            },
+                        }).then(res => res.json());
+                        const media = await MessageMedia.fromUrl(imageUrl.large);
+                        await client.sendMessage(msg.from, media);
+                    }
+                    catch (error) {
+                        console.error('Error fetching image:', error);
+                        client.sendMessage(msg.from, 'Oops! Something went wrong fetching your image.');
+                    } finally {
+                        lastFetchTime = Date.now();
+                    }
+                } else {
+                    const cooldownSeconds = waitTime / 1000;
+                    const remainingSeconds = Math.ceil(cooldownSeconds - (Date.now() - lastFetchTime) / 1000);
 
-            for (let participant of chat.participants) {
-                mentions.push(`${participant.id.user}@c.us`);
-                text += `@${participant.id.user} `;
+                    client.sendMessage(msg.from, `Mohon tunggu ${remainingSeconds} detik`);
+                }
             }
+        };
 
-            await chat.sendMessage(text, { mentions });
+        const handleCosplayRequest = async (body, collection, tag) => {
+            const capitalizeStr = body.charAt(0).toUpperCase() + body.slice(1);
+            const pipeline = [
+                { $match: { tag: `${capitalizeStr} (${tag})` } },
+                { $sample: { size: 1 } }
+            ];
+            const data = await collection.aggregate(pipeline);
+            if (data.length > 0) {
+                if (!lastFetchTime || Date.now() - lastFetchTime >= waitTime) {
+                    const media = await MessageMedia.fromUrl(data[0].url);
+                    await client.sendMessage(msg.from, media);
+                    lastFetchTime = Date.now();
+                } else {
+                    const cooldownSeconds = waitTime / 1000;
+                    const remainingSeconds = Math.ceil(cooldownSeconds - (Date.now() - lastFetchTime) / 1000);
+
+                    client.sendMessage(msg.from, `Mohon tunggu ${remainingSeconds} detik`);
+                }
+            }
+        };
+
+        const handleEveryoneRequest = async () => {
+            const chat = await msg.getChat();
+            const groupId = chat.id.user;
+            if (groupId === process.env.GROUP_ID) {
+                let text = '';
+                let mentions = [];
+
+                for (let participant of chat.participants) {
+                    mentions.push(`${participant.id.user}@c.us`);
+                    text += `@${participant.id.user} `;
+                }
+
+                await chat.sendMessage(text, { mentions });
+            }
+        };
+
+        const handleStickerRequest = async () => {
+            if (msg.type === 'image' && msg.hasMedia === true) {
+                const media = await msg.downloadMedia();
+                await client.sendMessage(msg.from, media, {
+                    sendMediaAsSticker: true,
+                    stickerAuthor: 'Chatbot',
+                    stickerName: 'Generated Sticker'
+                });
+            }
+        };
+
+        if (['!waifu', '!neko', '!shinobu', '!megumin'].includes(msg.body)) {
+            await handleWaifuRequest(msg.body.replace('!', ''));
+        } else if (['!topaz', '!firefly', '!robin', '!sparkle', '!acheron'].includes(msg.body)) {
+            await handleHSRImageRequest(msg.body.replace('!', ''), Image, 'Honkai Star Rail');
+        } else if (msg.body === '!azula') {
+            await handleCosplayRequest(msg.body.replace('!', ''), Cosplay, 'Cosplay');
+        } else if (msg.body === '!everyone') {
+            await handleEveryoneRequest();
+        } else if (msg.body === '!sticker') {
+            await handleStickerRequest();
         }
     });
 
     client.on('group_join', async (participant) => {
-        const group = await client.getChatById(participant.groupId);
-        const newMemberName = participant.name;
+        if (participant.id.participant !== process.env.BOT_NUMBER) {
+            const chat = await client.getChatById(participant.chatId);
+            const group_name = chat.name;
+            let user = await client.getContactById(participant.id.participant);
 
-        // Craft your welcome message here
-        const welcomeMessage = `Halo @${newMemberName}, selamat bergabung di grup! `;
+            const welcomeMessage = "Halo @" + user.id.user + ",\n" +
+                "selamat bergabung di grup " + group_name + "!";
 
-        // Send the welcome message to the group
-        group.sendMessage(welcomeMessage);
+            chat.sendMessage(welcomeMessage, { mentions: [user] });
+        }
     });
 
     client.initialize();
