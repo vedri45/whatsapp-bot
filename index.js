@@ -49,13 +49,13 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
 
     client.on('message', async (msg) => {
         if (['!waifu', '!neko', '!shinobu', '!megumin'].includes(msg.body)) {
-            await handleWaifuRequest(msg, client, msg.body.replace('!', ''));
+            await handleWaifuRequest(msg, msg.body.replace('!', ''));
         } else if (['!topaz', '!firefly', '!robin', '!sparkle', '!acheron'].includes(msg.body)) {
-            await handleHSRImageRequest(msg, client, msg.body.replace('!', ''), Image, 'Honkai Star Rail');
+            await handleHSRImageRequest(msg, msg.body.replace('!', ''), Image, 'Honkai Star Rail');
         } else if (msg.body === '!everyone') {
             await handleEveryoneRequest(msg);
         } else if (msg.body === '!sticker') {
-            await handleStickerRequest(msg, client);
+            await handleStickerRequest(msg);
         } else if (msg.body.startsWith('!prompt')) {
             await handlePromptRequest(msg);
         }
