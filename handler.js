@@ -92,7 +92,7 @@ const handleStickerRequest = async (msg) => {
 
 const handlePromptRequest = async (msg) => {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = msg.body.slice(8).trim();
+    const prompt = msg.body.replace(/@\d+\s*prompt\s*/g, '').trim();
     if (!lastFetchTime || Date.now() - lastFetchTime >= waitTime) {
         try {
             const result = await model.generateContent(prompt);

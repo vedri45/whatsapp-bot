@@ -43,16 +43,29 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     });
 
     client.on('message', async (msg) => {
-        if (['!waifu', '!neko', '!shinobu', '!megumin'].includes(msg.body)) {
-            await handleWaifuRequest(msg, msg.body.replace('!', ''));
-        } else if (['!topaz', '!firefly', '!robin', '!sparkle', '!acheron'].includes(msg.body)) {
-            await handleHSRImageRequest(msg, msg.body.replace('!', ''), Image, 'Honkai Star Rail');
-        } else if (msg.body === '!everyone') {
-            await handleEveryoneRequest(msg);
-        } else if (msg.body === '!sticker') {
-            await handleStickerRequest(msg);
-        } else if (msg.body.startsWith('!prompt')) {
-            await handlePromptRequest(msg);
+        // Check if the message mentions the bot and the length is 1
+        if (msg.mentionedIds && msg.mentionedIds.length === 1 && msg.mentionedIds[0] === process.env.BOT_NUMBER) {
+            // Trim the @c.us suffix from the bot number
+            const botNumber = process.env.BOT_NUMBER.replace(/@c\.us$/, '');
+
+            // Extract the command from the message body after the mention
+            const command = msg.body.replace(`@${botNumber}`, '').trim();
+            console.log(`Extracted command: "${command}"`); // Log the extracted command
+
+            // Check for commands without the '!' prefix
+            if (command.startsWith('prompt')) {
+                await handlePromptRequest(msg);
+            } else if (['waifu', 'neko', 'shinobu', 'megumin'].includes(command)) {
+                await handleWaifuRequest(msg, command);
+            } else if (['topaz', 'firefly', 'robin', 'sparkle', 'acheron'].includes(command)) {
+                await handleHSRImageRequest(msg, command, Image, 'Honkai Star Rail');
+            } else if (command.startsWith('everyone')) {
+                await handleEveryoneRequest(msg);
+            } else if (command.startsWith('sticker')) {
+                await handleStickerRequest(msg);
+            } else {
+                console.log(`Unknown command: "${command}"`); // Log unknown commands
+            }
         }
     });
 
