@@ -65,8 +65,8 @@ const handleHSRImageRequest = async (msg, body, collection, tag) => {
 
 const handleEveryoneRequest = async (msg) => {
     const chat = await msg.getChat();
-    const groupId = chat.id.user;
-    if (groupId === process.env.GROUP_ID) {
+    const adminId = chat.lastMessage.author;
+    if (adminId === process.env.ADMIN_ID) {
         let text = '';
         let mentions = [];
 
